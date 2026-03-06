@@ -4,11 +4,9 @@
   "description": "VisionPlus Headers Capture",
   "main": "api/capture.js",
   "scripts": {
-    "vercel-build": "echo 'Build complete'",
-    "postinstall": "npx playwright install chromium"
+    "vercel-build": "npm install playwright"
   },
   "dependencies": {
-    "playwright": "^1.40.0",
-    "playwright-core": "^1.40.0"
+    "playwright": "^1.40.0"
   }
 }
