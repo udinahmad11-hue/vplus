@@ -4,10 +4,10 @@
   "description": "VisionPlus Headers Capture",
   "main": "api/capture.js",
   "scripts": {
-    "vercel-build": "npm install && npx playwright install chromium"
+    "vercel-build": "echo 'Build complete'"
   },
   "dependencies": {
-    "@sparticuz/chromium": "^119.0.0",
-    "playwright-core": "^1.40.0"
+    "puppeteer-core": "^21.0.0",
+    "@sparticuz/chromium": "^119.0.0"
   }
 }
