@@ -1,10 +1,4 @@
-const { chromium } = require('playwright-core');
-const fs = require('fs');
-const path = require('path');
-
-// Chrome executable path untuk Vercel
-const chromePath = process.env.CHROME_PATH || 
-  '/usr/bin/google-chrome';
+const { chromium } = require('playwright');
 
 module.exports = async (req, res) => {
   // Set CORS headers
@@ -17,29 +11,35 @@ module.exports = async (req, res) => {
     return;
   }
 
-  // Untuk GET request ke root, tampilkan HTML
-  if (req.method === 'GET' && req.url === '/') {
-    const html = await getHtml();
-    res.setHeader('Content-Type', 'text/html');
-    res.status(200).send(html);
-    return;
-  }
-
-  // Untuk capture headers
-  if (req.method === 'GET' && req.url === '/capture') {
-    try {
-      const result = await captureHeaders();
-      res.status(200).json(result);
-    } catch (error) {
-      res.status(500).json({
-        status: 'error',
-        message: error.message
-      });
+  // Untuk GET request ke root atau /capture, proses
+  if (req.method === 'GET') {
+    // Cek apakah request untuk capture atau halaman utama
+    const url = req.url;
+    console.log('📥 Request URL:', url);
+    
+    // Jika ada parameter action=run, jalankan capture
+    if (url.includes('action=run') || url === '/capture?action=run') {
+      try {
+        console.log('🎯 Starting capture process...');
+        const result = await captureHeaders();
+        console.log('✅ Capture completed');
+        return res.status(200).json(result);
+      } catch (error) {
+        console.error('❌ Error:', error);
+        return res.status(500).json({
+          status: 'error',
+          message: error.message
+        });
+      }
     }
-    return;
+    
+    // Jika tidak, tampilkan halaman HTML
+    const html = getHtml();
+    res.setHeader('Content-Type', 'text/html');
+    return res.status(200).send(html);
   }
 
-  // Default response
+  // Default response untuk method lain
   res.status(404).json({ error: 'Not found' });
 };
 
@@ -52,9 +52,9 @@ async function captureHeaders() {
 
   try {
     // Launch browser dengan config untuk serverless
+    console.log('🔄 Launching browser...');
     browser = await chromium.launch({
       headless: true,
-      executablePath: chromePath,
       args: [
         "--no-sandbox",
         "--disable-setuid-sandbox",
@@ -75,16 +75,17 @@ async function captureHeaders() {
 
     // Monitor requests
     page.on("request", request => {
-      if (request.url().includes("contentcdn.visionplus.id/v2/play") &&
-          request.url().includes(`channel_id=${CHANNEL_ID}`) &&
+      const url = request.url();
+      if (url.includes("contentcdn.visionplus.id/v2/play") &&
+          url.includes(`channel_id=${CHANNEL_ID}`) &&
           !captured) {
         
+        console.log('✅ API Play captured!');
         captured = {
-          url: request.url(),
+          url: url,
           method: request.method(),
           headers: request.headers()
         };
-        console.log("✅ API Play captured!");
       }
     });
 
@@ -96,21 +97,24 @@ async function captureHeaders() {
       timeout: 30000
     });
 
-    // Wait for API call (max 20 seconds)
-    for (let i = 0; i < 40 && !captured; i++) {
+    // Wait for API call (max 25 seconds)
+    console.log('⏳ Waiting for API call...');
+    for (let i = 0; i < 50 && !captured; i++) {
       await new Promise(r => setTimeout(r, 500));
     }
 
     await browser.close();
+    console.log('🔒 Browser closed');
 
   } catch (error) {
-    console.error("❌ Error:", error.message);
+    console.error("❌ Error in capture:", error.message);
     if (browser) await browser.close();
     throw error;
   }
 
   // Process result
   if (!captured) {
+    console.log('❌ No API captured');
     return {
       status: "error",
       message: "API tidak tertangkap dalam batas waktu",
@@ -132,6 +136,7 @@ async function captureHeaders() {
     }
   }
 
+  console.log('✅ Success! Headers captured');
   return {
     status: "success",
     channel_id: CHANNEL_ID,
@@ -142,7 +147,7 @@ async function captureHeaders() {
   };
 }
 
-async function getHtml() {
+function getHtml() {
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -245,6 +250,7 @@ async function getHtml() {
             padding: 10px;
             border-radius: 5px;
             margin: 10px 0;
+            border-left: 4px solid #ffaa00;
         }
     </style>
 </head>
@@ -293,6 +299,7 @@ async function getHtml() {
             curlContainer.style.display = 'none';
             
             try {
+                // Panggil endpoint dengan parameter action=run
                 const response = await fetch('/api/capture?action=run');
                 const data = await response.json();
                 
@@ -308,6 +315,7 @@ async function getHtml() {
                 result.textContent = JSON.stringify(data, null, 2);
             } catch (error) {
                 result.textContent = '❌ Error: ' + error.message;
+                console.error('Fetch error:', error);
             } finally {
                 btn.disabled = false;
                 loading.style.display = 'none';
