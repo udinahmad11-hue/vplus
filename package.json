@@ -1,0 +1,14 @@
+{
+  "name": "visionplus-headers",
+  "version": "1.0.0",
+  "description": "VisionPlus Headers Capture",
+  "main": "api/capture.js",
+  "scripts": {
+    "vercel-build": "echo 'Build complete'",
+    "postinstall": "npx playwright install chromium"
+  },
+  "dependencies": {
+    "playwright": "^1.40.0",
+    "playwright-core": "^1.40.0"
+  }
+}
