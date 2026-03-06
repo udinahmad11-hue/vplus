@@ -1,4 +1,5 @@
-const { chromium } = require('playwright');
+const chromium = require('@sparticuz/chromium');
+const playwright = require('playwright-core');
 
 module.exports = async (req, res) => {
   // Set CORS headers
@@ -13,7 +14,6 @@ module.exports = async (req, res) => {
 
   // Untuk GET request ke root atau /capture, proses
   if (req.method === 'GET') {
-    // Cek apakah request untuk capture atau halaman utama
     const url = req.url;
     console.log('📥 Request URL:', url);
     
@@ -28,7 +28,8 @@ module.exports = async (req, res) => {
         console.error('❌ Error:', error);
         return res.status(500).json({
           status: 'error',
-          message: error.message
+          message: error.message,
+          stack: error.stack
         });
       }
     }
@@ -51,11 +52,18 @@ async function captureHeaders() {
   let browser = null;
 
   try {
-    // Launch browser dengan config untuk serverless
+    // Download Chromium if needed
+    console.log('📥 Getting Chromium executable...');
+    const executablePath = await chromium.executablePath();
+    console.log('✅ Chromium path:', executablePath);
+
+    // Launch browser dengan config untuk Vercel
     console.log('🔄 Launching browser...');
-    browser = await chromium.launch({
+    browser = await playwright.chromium.launch({
       headless: true,
+      executablePath: executablePath,
       args: [
+        ...chromium.args,
         "--no-sandbox",
         "--disable-setuid-sandbox",
         "--disable-dev-shm-usage",
@@ -107,7 +115,7 @@ async function captureHeaders() {
     console.log('🔒 Browser closed');
 
   } catch (error) {
-    console.error("❌ Error in capture:", error.message);
+    console.error("❌ Error in capture:", error);
     if (browser) await browser.close();
     throw error;
   }
@@ -299,7 +307,6 @@ function getHtml() {
             curlContainer.style.display = 'none';
             
             try {
-                // Panggil endpoint dengan parameter action=run
                 const response = await fetch('/api/capture?action=run');
                 const data = await response.json();
                 
