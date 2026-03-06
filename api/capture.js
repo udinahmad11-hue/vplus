@@ -1,28 +1,25 @@
 const chromium = require('@sparticuz/chromium');
-const playwright = require('playwright-core');
+const puppeteer = require('puppeteer-core');
 
 module.exports = async (req, res) => {
   // Set CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   
-  // Handle preflight request
+  // Handle preflight
   if (req.method === 'OPTIONS') {
     res.status(200).end();
     return;
   }
 
-  // Untuk GET request ke root atau /capture, proses
   if (req.method === 'GET') {
     const url = req.url;
-    console.log('📥 Request URL:', url);
     
     // Jika ada parameter action=run, jalankan capture
-    if (url.includes('action=run') || url === '/capture?action=run') {
+    if (url.includes('action=run')) {
       try {
         console.log('🎯 Starting capture process...');
         const result = await captureHeaders();
-        console.log('✅ Capture completed');
         return res.status(200).json(result);
       } catch (error) {
         console.error('❌ Error:', error);
@@ -34,13 +31,12 @@ module.exports = async (req, res) => {
       }
     }
     
-    // Jika tidak, tampilkan halaman HTML
+    // Tampilkan halaman HTML
     const html = getHtml();
     res.setHeader('Content-Type', 'text/html');
     return res.status(200).send(html);
   }
 
-  // Default response untuk method lain
   res.status(404).json({ error: 'Not found' });
 };
 
@@ -52,39 +48,44 @@ async function captureHeaders() {
   let browser = null;
 
   try {
-    // Download Chromium if needed
+    // Dapatkan executable path Chromium
     console.log('📥 Getting Chromium executable...');
     const executablePath = await chromium.executablePath();
     console.log('✅ Chromium path:', executablePath);
 
-    // Launch browser dengan config untuk Vercel
+    // Launch browser
     console.log('🔄 Launching browser...');
-    browser = await playwright.chromium.launch({
-      headless: true,
+    browser = await puppeteer.launch({
       executablePath: executablePath,
       args: [
         ...chromium.args,
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-gpu",
-        "--disable-web-security",
-        "--single-process",
-        "--no-zygote"
-      ]
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--disable-web-security',
+        '--single-process',
+        '--no-zygote'
+      ],
+      headless: true,
+      defaultViewport: {
+        width: 1280,
+        height: 720
+      }
     });
 
-    const context = await browser.newContext({
-      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-      viewport: { width: 1280, height: 720 }
-    });
+    const page = await browser.newPage();
 
-    const page = await context.newPage();
+    // Set user agent
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
     // Monitor requests
-    page.on("request", request => {
+    await page.setRequestInterception(true);
+    page.on('request', request => {
       const url = request.url();
-      if (url.includes("contentcdn.visionplus.id/v2/play") &&
+      
+      // Cek apakah ini request ke API play
+      if (url.includes('contentcdn.visionplus.id/v2/play') &&
           url.includes(`channel_id=${CHANNEL_ID}`) &&
           !captured) {
         
@@ -95,17 +96,19 @@ async function captureHeaders() {
           headers: request.headers()
         };
       }
+      
+      request.continue();
     });
 
     console.log(`📺 Opening channel ID: ${CHANNEL_ID}`);
     
-    // Navigate with timeout
+    // Navigate to page
     await page.goto(`https://preview.visionplus.id/free/livetv?channel=${CHANNEL_ID}`, {
-      waitUntil: "domcontentloaded",
+      waitUntil: 'domcontentloaded',
       timeout: 30000
     });
 
-    // Wait for API call (max 25 seconds)
+    // Tunggu API call (max 25 detik)
     console.log('⏳ Waiting for API call...');
     for (let i = 0; i < 50 && !captured; i++) {
       await new Promise(r => setTimeout(r, 500));
@@ -115,26 +118,25 @@ async function captureHeaders() {
     console.log('🔒 Browser closed');
 
   } catch (error) {
-    console.error("❌ Error in capture:", error);
+    console.error('❌ Error in capture:', error);
     if (browser) await browser.close();
     throw error;
   }
 
   // Process result
   if (!captured) {
-    console.log('❌ No API captured');
     return {
-      status: "error",
-      message: "API tidak tertangkap dalam batas waktu",
+      status: 'error',
+      message: 'API tidak tertangkap dalam batas waktu',
       channel_id: CHANNEL_ID
     };
   }
 
-  // Filter important headers
+  // Filter headers
   const importantHeaders = [
-    "accept", "accept-language", "authorization", "device-id",
-    "origin", "partner", "referer", "request-token", "user-agent",
-    "x-signature", "sec-fetch-site", "sec-fetch-mode", "sec-fetch-dest"
+    'accept', 'accept-language', 'authorization', 'device-id',
+    'origin', 'partner', 'referer', 'request-token', 'user-agent',
+    'x-signature', 'sec-fetch-site', 'sec-fetch-mode', 'sec-fetch-dest'
   ];
 
   const filteredHeaders = {};
@@ -144,9 +146,8 @@ async function captureHeaders() {
     }
   }
 
-  console.log('✅ Success! Headers captured');
   return {
-    status: "success",
+    status: 'success',
     channel_id: CHANNEL_ID,
     request_url: captured.url,
     method: captured.method,
@@ -307,7 +308,7 @@ function getHtml() {
             curlContainer.style.display = 'none';
             
             try {
-                const response = await fetch('/api/capture?action=run');
+                const response = await fetch('/api/capture?action=run&t=' + Date.now());
                 const data = await response.json();
                 
                 if (data.status === 'success' && data.headers) {
@@ -322,7 +323,6 @@ function getHtml() {
                 result.textContent = JSON.stringify(data, null, 2);
             } catch (error) {
                 result.textContent = '❌ Error: ' + error.message;
-                console.error('Fetch error:', error);
             } finally {
                 btn.disabled = false;
                 loading.style.display = 'none';
